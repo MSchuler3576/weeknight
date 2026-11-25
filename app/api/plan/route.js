@@ -16,6 +16,11 @@ export async function POST(req) {
     .from('household_profile')
     .update({ plan_status: 'planning', plan_requested_at: new Date().toISOString() })
     .eq('id', ctx.household.id);
+  // Progress for the loading screen (kept separate so planning still works without these columns)
+  await ctx.sb
+    .from('household_profile')
+    .update({ plan_step: 'reading', plan_step_detail: null })
+    .eq('id', ctx.household.id);
 
   const res = await callN8n('app-plan-week', { household_id: ctx.household.id, groceries: list });
   if (!res.ok) {

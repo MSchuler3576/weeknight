@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { supabase, api } from '@/lib/supabase';
 import { parsePlan, DAYS } from '@/lib/parsePlan';
 import Logo from '../Logo';
+import Cooking from './Cooking';
 
 const DEFAULT_PANTRY = 'oil, butter, salt, pepper, garlic, common dried spices, flour, sugar';
 const STALE_MINUTES = 12;
@@ -37,7 +38,7 @@ export default function Dashboard() {
   const planning = household?.plan_status === 'planning';
   useEffect(() => {
     if (!planning || !user) return;
-    const t = setInterval(() => load(user.id), 8000);
+    const t = setInterval(() => load(user.id), 4000);
     return () => clearInterval(t);
   }, [planning, user, load]);
 
@@ -149,6 +150,21 @@ function Home({ household, meals, reload, setHousehold }) {
   const stale = planning && minutesSince > STALE_MINUTES;
   const firstName = (household.household_name || '').replace(/^the\s+/i, '');
 
+  // When a plan finishes, show a short "Dinner is ready" moment
+  const [celebrate, setCelebrate] = useState(false);
+  const wasPlanning = useRef(planning);
+  useEffect(() => {
+    if (wasPlanning.current && !planning) {
+      setCelebrate(true);
+      const t = setTimeout(() => setCelebrate(false), 3500);
+      wasPlanning.current = planning;
+      return () => clearTimeout(t);
+    }
+    wasPlanning.current = planning;
+  }, [planning]);
+  let savedGroceries = '';
+  try { savedGroceries = window.localStorage.getItem('weeknight-groceries') || ''; } catch {}
+
   return (
     <div className="wrap dash">
       <div>
@@ -158,10 +174,9 @@ function Home({ household, meals, reload, setHousehold }) {
         </div>
 
         {planning && !stale && (
-          <div className="status planning"><div className="spinner" />
-            <div><b>Your week is cooking…</b><br /><span style={{ fontSize: 14 }}>Writing, quality-checking and fixing your plan. Usually 3–6 minutes — we&rsquo;ll email it too.</span></div>
-          </div>
+          <Cooking step={household.plan_step} detail={household.plan_step_detail} startedAt={household.plan_requested_at} groceries={savedGroceries} />
         )}
+        {celebrate && <Cooking done groceries={savedGroceries} />}
         {stale && (
           <div className="status planning">
             <div><b>This is taking longer than usual.</b><br /><span style={{ fontSize: 14 }}>Check your email for the plan, or try again below.</span></div>
@@ -274,6 +289,7 @@ function PlanNextWeek({ household, hasPlan, busy, onStarted }) {
   async function start() {
     setError(''); setSending(true);
     try {
+      try { window.localStorage.setItem('weeknight-groceries', groceries); } catch {}
       await api('/api/plan', { groceries });
       setGroceries('');
       onStarted();
@@ -294,7 +310,8 @@ function PlanNextWeek({ household, hasPlan, busy, onStarted }) {
       <div className="row" style={{ marginTop: 12 }}>
         <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
         <button className="btn btn-ghost" type="button" onClick={() => fileRef.current?.click()} disabled={reading || busy}>
-          {reading ? 'Reading receipt…' : '📷 Scan receipt'}
+          <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>
+          {reading ? 'Reading receipt…' : 'Scan receipt'}
         </button>
         <button className="btn btn-primary" type="button" onClick={start} disabled={sending || busy || groceries.trim().length < 10}>
           {sending ? 'Starting…' : 'Plan my week'}
